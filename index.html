@@ -62,7 +62,6 @@
             canvas.height = Math.min(600, window.innerHeight * 0.7);
             slingshot.x = canvas.width * 0.2;
             slingshot.y = canvas.height - 100;
-            // Adjust pig positions based on canvas width
             pigs.forEach((pig, index) => {
                 pig.x = canvas.width - 200 + (index * 30);
                 pig.y = canvas.height - 100 - (index * 50);
@@ -71,8 +70,10 @@
                 bird.x = slingshot.x - (index + 1) * 50;
                 bird.y = slingshot.y;
             });
-            currentBird.x = slingshot.x;
-            currentBird.y = slingshot.y;
+            if (currentBird && !currentBird.launched) {
+                currentBird.x = slingshot.x;
+                currentBird.y = slingshot.y;
+            }
         }
         window.addEventListener('resize', resizeCanvas);
 
@@ -273,6 +274,7 @@
             ];
             score = 0;
             debug.textContent = 'Game restarted!';
+            resizeCanvas(); // Ensure positions are correct after restart
         }
 
         restartBtn.addEventListener('click', restartGame);
@@ -324,20 +326,23 @@
 
         // Game loop
         function gameLoop() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas each frame
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawBackground();
             drawGround();
             drawSlingshot();
 
+            // Update and draw current bird
             currentBird.update();
             currentBird.draw();
 
+            // Draw queued birds
             birdQueue.forEach((bird, index) => {
                 bird.x = slingshot.x - (index + 1) * 50;
                 bird.y = slingshot.y;
                 bird.draw();
             });
 
+            // Update and draw pigs
             pigs.forEach(pig => {
                 pig.update();
                 pig.draw();
@@ -353,6 +358,7 @@
                 }
             });
 
+            // Display score and bird count
             ctx.font = `bold ${Math.max(20, canvas.width * 0.03)}px Arial`;
             ctx.fillStyle = 'white';
             ctx.strokeStyle = 'black';
@@ -360,11 +366,24 @@
             ctx.strokeText(`Score: ${score}  Birds: ${birdQueue.length + 1}`, 20, 30);
             ctx.fillText(`Score: ${score}  Birds: ${birdQueue.length + 1}`, 20, 30);
 
-            if (currentBird.x > canvas.width + 50 || currentBird.x < -50 || currentBird.y > canvas.height + 50) {
+            // Switch to next bird if current bird is off-screen
+            if (currentBird.launched && 
+                (currentBird.x > canvas.width + 50 || 
+                 currentBird.x < -50 || 
+                 currentBird.y > canvas.height + 50 || 
+                 (Math.abs(currentBird.velocityX) < 0.1 && Math.abs(currentBird.velocityY) < 0.1 && currentBird.y >= canvas.height - 50 - currentBird.size/2))) {
                 if (birdQueue.length > 0) {
                     currentBird = birdQueue.shift();
+                    currentBird.x = slingshot.x;
+                    currentBird.y = slingshot.y;
+                    currentBird.launched = false;
+                    currentBird.velocityX = 0;
+                    currentBird.velocityY = 0;
+                    currentBird.rotation = 0;
+                    debug.textContent = `Next bird activated! Birds left: ${birdQueue.length + 1}`;
                 } else {
-                    restartGame();
+                    debug.textContent = 'No birds left! Restarting...';
+                    setTimeout(restartGame, 1000); // Delay restart for visibility
                 }
             }
 
