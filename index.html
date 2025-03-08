@@ -58,26 +58,20 @@
 
         // Responsive canvas sizing
         function resizeCanvas() {
-            canvas.width = Math.min(800, window.innerWidth * 0.9);
-            canvas.height = Math.min(600, window.innerHeight * 0.7);
-            slingshot.x = canvas.width * 0.2;
-            slingshot.y = canvas.height - 100;
-            pigs.forEach((pig, index) => {
-                pig.x = canvas.width - 200 + (index * 30);
-                pig.y = canvas.height - 100 - (index * 50);
-            });
-            birdQueue.forEach((bird, index) => {
-                bird.x = slingshot.x - (index + 1) * 50;
-                bird.y = slingshot.y;
-            });
-            if (currentBird && !currentBird.launched) {
-                currentBird.x = slingshot.x;
-                currentBird.y = slingshot.y;
+            try {
+                canvas.width = Math.min(800, window.innerWidth * 0.9);
+                canvas.height = Math.min(600, window.innerHeight * 0.7);
+                slingshot.x = canvas.width * 0.2;
+                slingshot.y = canvas.height - 100;
+                resetLevel(currentLevel);
+            } catch (e) {
+                console.error('Resize error:', e);
+                debug.textContent = 'Resize failed: ' + e.message;
             }
         }
         window.addEventListener('resize', resizeCanvas);
 
-        // Image assets (optional)
+        // Image assets
         const assets = {
             birdRed: { img: new Image(), loaded: false, src: 'https://cdn.pixabay.com/photo/2018/05/17/08/51/angry-bird-3407584_1280.png' },
             birdBlue: { img: new Image(), loaded: false, src: 'https://cdn.pixabay.com/photo/2018/05/17/08/51/angry-bird-3407585_1280.png' },
@@ -186,20 +180,90 @@
 
         // Game objects
         const slingshot = { x: canvas.width * 0.2, y: canvas.height - 100 };
-        let birdQueue = [
-            new Bird(slingshot.x, slingshot.y, 'red'),
-            new Bird(slingshot.x - 50, slingshot.y, 'blue'),
-            new Bird(slingshot.x - 100, slingshot.y, 'red')
-        ];
-        let currentBird = birdQueue.shift();
-        let pigs = [
-            new Pig(canvas.width - 200, canvas.height - 100),
-            new Pig(canvas.width - 150, canvas.height - 150),
-            new Pig(canvas.width - 180, canvas.height - 200)
-        ];
+        let birdQueue = [];
+        let currentBird = null;
+        let pigs = [];
         let score = 0;
         let cloudOffset = 0;
         let isDragging = false;
+        let currentLevel = 0;
+        let isGameRunning = true;
+
+        // Level definitions
+        const levels = [
+            // Level 1
+            {
+                birds: [
+                    { type: 'red', x: slingshot.x, y: slingshot.y },
+                    { type: 'blue', x: slingshot.x - 50, y: slingshot.y },
+                    { type: 'red', x: slingshot.x - 100, y: slingshot.y }
+                ],
+                pigs: [
+                    { x: canvas.width - 200, y: canvas.height - 100 },
+                    { x: canvas.width - 150, y: canvas.height - 150 },
+                    { x: canvas.width - 180, y: canvas.height - 200 }
+                ]
+            },
+            // Level 2
+            {
+                birds: [
+                    { type: 'red', x: slingshot.x, y: slingshot.y },
+                    { type: 'blue', x: slingshot.x - 50, y: slingshot.y },
+                    { type: 'red', x: slingshot.x - 100, y: slingshot.y },
+                    { type: 'blue', x: slingshot.x - 150, y: slingshot.y }
+                ],
+                pigs: [
+                    { x: canvas.width - 200, y: canvas.height - 100 },
+                    { x: canvas.width - 150, y: canvas.height - 100 },
+                    { x: canvas.width - 180, y: canvas.height - 150 },
+                    { x: canvas.width - 220, y: canvas.height - 200 }
+                ]
+            },
+            // Level 3
+            {
+                birds: [
+                    { type: 'red', x: slingshot.x, y: slingshot.y },
+                    { type: 'blue', x: slingshot.x - 50, y: slingshot.y },
+                    { type: 'red', x: slingshot.x - 100, y: slingshot.y },
+                    { type: 'blue', x: slingshot.x - 150, y: slingshot.y },
+                    { type: 'red', x: slingshot.x - 200, y: slingshot.y }
+                ],
+                pigs: [
+                    { x: canvas.width - 200, y: canvas.height - 100 },
+                    { x: canvas.width - 150, y: canvas.height - 150 },
+                    { x: canvas.width - 250, y: canvas.height - 150 },
+                    { x: canvas.width - 180, y: canvas.height - 200 },
+                    { x: canvas.width - 220, y: canvas.height - 250 }
+                ]
+            }
+        ];
+
+        // Load level
+        function resetLevel(levelIndex) {
+            try {
+                if (levelIndex >= levels.length) {
+                    levelIndex = 0; // Loop back to first level
+                }
+                const level = levels[levelIndex];
+                birdQueue = level.birds.map(b => new Bird(b.x, b.y, b.type));
+                currentBird = birdQueue.shift();
+                pigs = level.pigs.map(p => new Pig(p.x, p.y));
+                // Adjust positions for current canvas size
+                pigs.forEach((pig, index) => {
+                    pig.x = canvas.width - 200 + (index % 3) * 30;
+                    pig.y = canvas.height - 100 - Math.floor(index / 3) * 50;
+                });
+                birdQueue.forEach((bird, index) => {
+                    bird.x = slingshot.x - (index + 1) * 50;
+                    bird.y = slingshot.y;
+                });
+                currentBird.x = slingshot.x;
+                currentBird.y = slingshot.y;
+            } catch (e) {
+                console.error('Level reset error:', e);
+                debug.textContent = 'Level reset failed: ' + e.message;
+            }
+        }
 
         // Input handling
         function getPointerPos(e) {
@@ -261,20 +325,11 @@
 
         // Restart function
         function restartGame() {
-            birdQueue = [
-                new Bird(slingshot.x, slingshot.y, 'red'),
-                new Bird(slingshot.x - 50, slingshot.y, 'blue'),
-                new Bird(slingshot.x - 100, slingshot.y, 'red')
-            ];
-            currentBird = birdQueue.shift();
-            pigs = [
-                new Pig(canvas.width - 200, canvas.height - 100),
-                new Pig(canvas.width - 150, canvas.height - 150),
-                new Pig(canvas.width - 180, canvas.height - 200)
-            ];
+            currentLevel = 0;
             score = 0;
-            debug.textContent = 'Game restarted!';
-            resizeCanvas(); // Ensure positions are correct after restart
+            resetLevel(currentLevel);
+            isGameRunning = true;
+            debug.textContent = 'Game restarted! Level 1';
         }
 
         restartBtn.addEventListener('click', restartGame);
@@ -326,68 +381,77 @@
 
         // Game loop
         function gameLoop() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawBackground();
-            drawGround();
-            drawSlingshot();
+            if (!isGameRunning) return;
 
-            // Update and draw current bird
-            currentBird.update();
-            currentBird.draw();
+            try {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawBackground();
+                drawGround();
+                drawSlingshot();
 
-            // Draw queued birds
-            birdQueue.forEach((bird, index) => {
-                bird.x = slingshot.x - (index + 1) * 50;
-                bird.y = slingshot.y;
-                bird.draw();
-            });
+                currentBird.update();
+                currentBird.draw();
 
-            // Update and draw pigs
-            pigs.forEach(pig => {
-                pig.update();
-                pig.draw();
-                if (!pig.hit && 
-                    currentBird.x + currentBird.size/2 > pig.x && 
-                    currentBird.x - currentBird.size/2 < pig.x + pig.size &&
-                    currentBird.y + currentBird.size/2 > pig.y && 
-                    currentBird.y - currentBird.size/2 < pig.y + pig.size) {
-                    pig.hit = true;
-                    pig.velocityX = currentBird.velocityX * 0.5;
-                    pig.velocityY = -2;
-                    score += 100;
+                birdQueue.forEach((bird, index) => {
+                    bird.x = slingshot.x - (index + 1) * 50;
+                    bird.y = slingshot.y;
+                    bird.draw();
+                });
+
+                pigs.forEach(pig => {
+                    pig.update();
+                    pig.draw();
+                    if (!pig.hit && 
+                        currentBird.x + currentBird.size/2 > pig.x && 
+                        currentBird.x - currentBird.size/2 < pig.x + pig.size &&
+                        currentBird.y + currentBird.size/2 > pig.y && 
+                        currentBird.y - currentBird.size/2 < pig.y + pig.size) {
+                        pig.hit = true;
+                        pig.velocityX = currentBird.velocityX * 0.5;
+                        pig.velocityY = -2;
+                        score += 100;
+                    }
+                });
+
+                ctx.font = `bold ${Math.max(20, canvas.width * 0.03)}px Arial`;
+                ctx.fillStyle = 'white';
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 2;
+                ctx.strokeText(`Score: ${score}  Birds: ${birdQueue.length + 1}  Level: ${currentLevel + 1}`, 20, 30);
+                ctx.fillText(`Score: ${score}  Birds: ${birdQueue.length + 1}  Level: ${currentLevel + 1}`, 20, 30);
+
+                // Check for next bird or level progression
+                if (currentBird.launched && 
+                    (currentBird.x > canvas.width + 50 || 
+                     currentBird.x < -50 || 
+                     currentBird.y > canvas.height + 50 || 
+                     (Math.abs(currentBird.velocityX) < 0.1 && Math.abs(currentBird.velocityY) < 0.1 && currentBird.y >= canvas.height - 50 - currentBird.size/2))) {
+                    if (birdQueue.length > 0) {
+                        currentBird = birdQueue.shift();
+                        currentBird.x = slingshot.x;
+                        currentBird.y = slingshot.y;
+                        currentBird.launched = false;
+                        currentBird.velocityX = 0;
+                        currentBird.velocityY = 0;
+                        currentBird.rotation = 0;
+                        debug.textContent = `Next bird activated! Birds left: ${birdQueue.length + 1}`;
+                    } else if (pigs.every(pig => pig.hit)) {
+                        currentLevel++;
+                        if (currentLevel >= levels.length) currentLevel = 0;
+                        resetLevel(currentLevel);
+                        debug.textContent = `Level ${currentLevel + 1} started!`;
+                    } else {
+                        debug.textContent = 'No birds left! Restarting...';
+                        setTimeout(restartGame, 1000);
+                    }
                 }
-            });
 
-            // Display score and bird count
-            ctx.font = `bold ${Math.max(20, canvas.width * 0.03)}px Arial`;
-            ctx.fillStyle = 'white';
-            ctx.strokeStyle = 'black';
-            ctx.lineWidth = 2;
-            ctx.strokeText(`Score: ${score}  Birds: ${birdQueue.length + 1}`, 20, 30);
-            ctx.fillText(`Score: ${score}  Birds: ${birdQueue.length + 1}`, 20, 30);
-
-            // Switch to next bird if current bird is off-screen
-            if (currentBird.launched && 
-                (currentBird.x > canvas.width + 50 || 
-                 currentBird.x < -50 || 
-                 currentBird.y > canvas.height + 50 || 
-                 (Math.abs(currentBird.velocityX) < 0.1 && Math.abs(currentBird.velocityY) < 0.1 && currentBird.y >= canvas.height - 50 - currentBird.size/2))) {
-                if (birdQueue.length > 0) {
-                    currentBird = birdQueue.shift();
-                    currentBird.x = slingshot.x;
-                    currentBird.y = slingshot.y;
-                    currentBird.launched = false;
-                    currentBird.velocityX = 0;
-                    currentBird.velocityY = 0;
-                    currentBird.rotation = 0;
-                    debug.textContent = `Next bird activated! Birds left: ${birdQueue.length + 1}`;
-                } else {
-                    debug.textContent = 'No birds left! Restarting...';
-                    setTimeout(restartGame, 1000); // Delay restart for visibility
-                }
+                requestAnimationFrame(gameLoop);
+            } catch (e) {
+                console.error('Game loop error:', e);
+                debug.textContent = 'Game error: ' + e.message;
+                isGameRunning = false;
             }
-
-            requestAnimationFrame(gameLoop);
         }
 
         // Image loading
@@ -398,18 +462,29 @@
                 asset.loaded = true;
                 loadedCount++;
                 debug.textContent = `Images loaded: ${loadedCount}/${totalImages}`;
+                if (loadedCount === totalImages) {
+                    resizeCanvas();
+                    resetLevel(currentLevel);
+                    gameLoop();
+                }
             };
             asset.img.onerror = () => {
                 console.warn(`Failed to load ${asset.src}`);
                 loadedCount++;
                 debug.textContent = `Images loaded: ${loadedCount}/${totalImages} (some failed)`;
+                if (loadedCount === totalImages) {
+                    resizeCanvas();
+                    resetLevel(currentLevel);
+                    gameLoop();
+                }
             };
             asset.img.src = asset.src;
         });
 
-        // Initial setup and start
+        // Initial setup (start only after images load or fail)
         resizeCanvas();
-        gameLoop();
+        resetLevel(currentLevel);
+        if (loadedCount === totalImages) gameLoop(); // Start if images already loaded
     </script>
 </body>
 </html>
