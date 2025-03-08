@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Angry Birds Adventure</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(to bottom, #87CEEB, #4682B4);
+            overflow: hidden;
+        }
+        #gameCanvas {
+            border: 2px solid #333;
+            box-shadow: 0 0 15px rgba(0,0,0,0.7);
+            max-width: 100%;
+            max-height: 80vh;
+        }
+        #restartBtn {
+            margin-top: 10px;
+            padding: 12px 24px;
+            font-size: 18px;
+            font-family: Arial, sans-serif;
+            background-color: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #restartBtn:hover {
+            background-color: #cc0000;
+        }
+        #debug {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            text-shadow: 1px 1px 2px black;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <button id="restartBtn">Restart Game</button>
+    <div id="debug">Game starting...</div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const debug = document.getElementById('debug');
+        const restartBtn = document.getElementById('restartBtn');
+
+        // Responsive canvas sizing
+        function resizeCanvas() {
+            canvas.width = Math.min(800, window.innerWidth * 0.9);
+            canvas.height = Math.min(600, window.innerHeight * 0.7);
+            slingshot.x = canvas.width * 0.2;
+            slingshot.y = canvas.height - 100;
+            // Adjust pig positions based on canvas width
+            pigs.forEach((pig, index) => {
+                pig.x = canvas.width - 200 + (index * 30);
+                pig.y = canvas.height - 100 - (index * 50);
+            });
+            birdQueue.forEach((bird, index) => {
+                bird.x = slingshot.x - (index + 1) * 50;
+                bird.y = slingshot.y;
+            });
+            currentBird.x = slingshot.x;
+            currentBird.y = slingshot.y;
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // Image assets (optional)
+        const assets = {
+            birdRed: { img: new Image(), loaded: false, src: 'https://cdn.pixabay.com/photo/2018/05/17/08/51/angry-bird-3407584_1280.png' },
+            birdBlue: { img: new Image(), loaded: false, src: 'https://cdn.pixabay.com/photo/2018/05/17/08/51/angry-bird-3407585_1280.png' },
+            slingshot: { img: new Image(), loaded: false, src: 'https://cdn.pixabay.com/photo/2013/07/12/15/36/slingshot-150128_1280.png' },
+            pig: { img: new Image(), loaded: false, src: 'https://cdn.pixabay.com/photo/2017/01/31/16/33/pig-2025578_1280.png' }
+        };
+
+        // Bird class
+        class Bird {
+            constructor(x, y, type = 'red') {
+                this.x = x;
+                this.y = y;
+                this.size = 40;
+                this.velocityX = 0;
+                this.velocityY = 0;
+                this.isDragging = false;
+                this.launched = false;
+                this.rotation = 0;
+                this.type = type;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                const birdImg = this.type === 'red' ? assets.birdRed : assets.birdBlue;
+                if (birdImg.loaded) {
+                    ctx.drawImage(birdImg.img, -this.size/2, -this.size/2, this.size, this.size);
+                } else {
+                    ctx.fillStyle = this.type === 'red' ? 'red' : 'blue';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.size/2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath();
+                    ctx.arc(8, -5, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            update() {
+                if (this.launched) {
+                    this.x += this.velocityX;
+                    this.y += this.velocityY;
+                    this.velocityY += 0.3;
+                    this.rotation += 0.1;
+                    if (this.y + this.size/2 > canvas.height - 50) {
+                        this.y = canvas.height - 50 - this.size/2;
+                        this.velocityY = 0;
+                        this.velocityX *= 0.9;
+                        this.rotation = 0;
+                    }
+                }
+            }
+        }
+
+        // Pig class
+        class Pig {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = 50;
+                this.hit = false;
+                this.velocityX = 0;
+                this.velocityY = 0;
+                this.rotation = 0;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.size/2, this.y + this.size/2);
+                ctx.rotate(this.rotation);
+                if (assets.pig.loaded) {
+                    ctx.drawImage(assets.pig.img, -this.size/2, -this.size/2, this.size, this.size);
+                } else {
+                    ctx.fillStyle = this.hit ? '#666' : '#2E8B57';
+                    ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath();
+                    ctx.arc(-this.size/2 + 15, -this.size/2 + 20, 5, 0, Math.PI * 2);
+                    ctx.arc(-this.size/2 + 35, -this.size/2 + 20, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                if (this.hit) {
+                    ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+                    ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
+                }
+                ctx.restore();
+            }
+
+            update() {
+                if (this.hit) {
+                    this.x += this.velocityX;
+                    this.y += this.velocityY;
+                    this.velocityY += 0.3;
+                    this.rotation += 0.05;
+                    if (this.y + this.size > canvas.height - 50) {
+                        this.y = canvas.height - 50 - this.size;
+                        this.velocityY *= -0.3;
+                        this.velocityX *= 0.9;
+                    }
+                }
+            }
+        }
+
+        // Game objects
+        const slingshot = { x: canvas.width * 0.2, y: canvas.height - 100 };
+        let birdQueue = [
+            new Bird(slingshot.x, slingshot.y, 'red'),
+            new Bird(slingshot.x - 50, slingshot.y, 'blue'),
+            new Bird(slingshot.x - 100, slingshot.y, 'red')
+        ];
+        let currentBird = birdQueue.shift();
+        let pigs = [
+            new Pig(canvas.width - 200, canvas.height - 100),
+            new Pig(canvas.width - 150, canvas.height - 150),
+            new Pig(canvas.width - 180, canvas.height - 200)
+        ];
+        let score = 0;
+        let cloudOffset = 0;
+        let isDragging = false;
+
+        // Input handling
+        function getPointerPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+            const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+            return { x, y };
+        }
+
+        canvas.addEventListener('mousedown', (e) => startDrag(e, 'mouse'));
+        canvas.addEventListener('touchstart', (e) => startDrag(e, 'touch'), { passive: false });
+        canvas.addEventListener('mousemove', drag);
+        canvas.addEventListener('touchmove', drag, { passive: false });
+        canvas.addEventListener('mouseup', launch);
+        canvas.addEventListener('touchend', launch);
+
+        function startDrag(e, type) {
+            e.preventDefault();
+            if (!currentBird.launched && !isDragging) {
+                const pos = getPointerPos(e);
+                if (Math.hypot(pos.x - currentBird.x, pos.y - currentBird.y) < currentBird.size/2) {
+                    currentBird.isDragging = true;
+                    isDragging = true;
+                }
+            }
+        }
+
+        function drag(e) {
+            e.preventDefault();
+            if (currentBird.isDragging && !currentBird.launched) {
+                const pos = getPointerPos(e);
+                const dx = pos.x - slingshot.x;
+                const dy = pos.y - slingshot.y;
+                const distance = Math.hypot(dx, dy);
+                const maxPull = 60;
+                if (distance > maxPull) {
+                    const angle = Math.atan2(dy, dx);
+                    currentBird.x = slingshot.x + Math.cos(angle) * maxPull;
+                    currentBird.y = slingshot.y + Math.sin(angle) * maxPull;
+                } else {
+                    currentBird.x = pos.x;
+                    currentBird.y = pos.y;
+                }
+            }
+        }
+
+        function launch(e) {
+            e.preventDefault();
+            if (currentBird.isDragging && !currentBird.launched) {
+                currentBird.isDragging = false;
+                currentBird.launched = true;
+                isDragging = false;
+                const dx = slingshot.x - currentBird.x;
+                const dy = slingshot.y - currentBird.y;
+                currentBird.velocityX = dx * 0.2;
+                currentBird.velocityY = dy * 0.2;
+            }
+        }
+
+        // Restart function
+        function restartGame() {
+            birdQueue = [
+                new Bird(slingshot.x, slingshot.y, 'red'),
+                new Bird(slingshot.x - 50, slingshot.y, 'blue'),
+                new Bird(slingshot.x - 100, slingshot.y, 'red')
+            ];
+            currentBird = birdQueue.shift();
+            pigs = [
+                new Pig(canvas.width - 200, canvas.height - 100),
+                new Pig(canvas.width - 150, canvas.height - 150),
+                new Pig(canvas.width - 180, canvas.height - 200)
+            ];
+            score = 0;
+            debug.textContent = 'Game restarted!';
+        }
+
+        restartBtn.addEventListener('click', restartGame);
+
+        // Background
+        function drawBackground() {
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(canvas.width - 80, 80, 50, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            cloudOffset = (cloudOffset + 0.5) % (canvas.width + 100);
+            for (let i = 0; i < 3; i++) {
+                const cloudX = (i * 200 + cloudOffset) % (canvas.width + 100) - 100;
+                const cloudY = 80 + (i * 40);
+                ctx.beginPath();
+                ctx.arc(cloudX, cloudY, 25, 0, Math.PI * 2);
+                ctx.arc(cloudX + 30, cloudY + 10, 35, 0, Math.PI * 2);
+                ctx.arc(cloudX + 60, cloudY, 25, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawGround() {
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
+            ctx.fillStyle = '#228B22';
+            for (let i = 0; i < Math.ceil(canvas.width / 160); i++) {
+                ctx.beginPath();
+                ctx.arc(i * 160 + 80, canvas.height - 25, 25, 0, Math.PI, true);
+                ctx.fill();
+            }
+        }
+
+        function drawSlingshot() {
+            if (assets.slingshot.loaded) {
+                ctx.drawImage(assets.slingshot.img, slingshot.x - 40, slingshot.y - 40, 80, 80);
+            } else {
+                ctx.fillStyle = '#964B00';
+                ctx.beginPath();
+                ctx.moveTo(slingshot.x - 20, canvas.height - 50);
+                ctx.lineTo(slingshot.x, slingshot.y);
+                ctx.lineTo(slingshot.x + 20, canvas.height - 50);
+                ctx.fill();
+            }
+        }
+
+        // Game loop
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas each frame
+            drawBackground();
+            drawGround();
+            drawSlingshot();
+
+            currentBird.update();
+            currentBird.draw();
+
+            birdQueue.forEach((bird, index) => {
+                bird.x = slingshot.x - (index + 1) * 50;
+                bird.y = slingshot.y;
+                bird.draw();
+            });
+
+            pigs.forEach(pig => {
+                pig.update();
+                pig.draw();
+                if (!pig.hit && 
+                    currentBird.x + currentBird.size/2 > pig.x && 
+                    currentBird.x - currentBird.size/2 < pig.x + pig.size &&
+                    currentBird.y + currentBird.size/2 > pig.y && 
+                    currentBird.y - currentBird.size/2 < pig.y + pig.size) {
+                    pig.hit = true;
+                    pig.velocityX = currentBird.velocityX * 0.5;
+                    pig.velocityY = -2;
+                    score += 100;
+                }
+            });
+
+            ctx.font = `bold ${Math.max(20, canvas.width * 0.03)}px Arial`;
+            ctx.fillStyle = 'white';
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.strokeText(`Score: ${score}  Birds: ${birdQueue.length + 1}`, 20, 30);
+            ctx.fillText(`Score: ${score}  Birds: ${birdQueue.length + 1}`, 20, 30);
+
+            if (currentBird.x > canvas.width + 50 || currentBird.x < -50 || currentBird.y > canvas.height + 50) {
+                if (birdQueue.length > 0) {
+                    currentBird = birdQueue.shift();
+                } else {
+                    restartGame();
+                }
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Image loading
+        let loadedCount = 0;
+        const totalImages = Object.keys(assets).length;
+        Object.values(assets).forEach(asset => {
+            asset.img.onload = () => {
+                asset.loaded = true;
+                loadedCount++;
+                debug.textContent = `Images loaded: ${loadedCount}/${totalImages}`;
+            };
+            asset.img.onerror = () => {
+                console.warn(`Failed to load ${asset.src}`);
+                loadedCount++;
+                debug.textContent = `Images loaded: ${loadedCount}/${totalImages} (some failed)`;
+            };
+            asset.img.src = asset.src;
+        });
+
+        // Initial setup and start
+        resizeCanvas();
+        gameLoop();
+    </script>
+</body>
+</html>
